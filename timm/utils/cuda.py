@@ -17,9 +17,13 @@ from .clip_grad import dispatch_clip_grad
 class ApexScaler:
     state_dict_key = "amp"
 
+    def __init__(self):
+        self.time = time.time()
+
     def __call__(self, loss, optimizer, clip_grad=None, clip_mode='norm', parameters=None, create_graph=False):
         with amp.scale_loss(loss, optimizer) as scaled_loss:
             scaled_loss.backward(create_graph=create_graph)
+        self.time = time.time()
         if clip_grad is not None:
             dispatch_clip_grad(amp.master_params(optimizer), clip_grad, mode=clip_mode)
         optimizer.step()
@@ -38,9 +42,11 @@ class NativeScaler:
 
     def __init__(self):
         self._scaler = torch.cuda.amp.GradScaler()
+        self.time = time.time()
 
     def __call__(self, loss, optimizer, clip_grad=None, clip_mode='norm', parameters=None, create_graph=False):
         self._scaler.scale(loss).backward(create_graph=create_graph)
+        self.time = time.time()
         if clip_grad is not None:
             assert parameters is not None
             self._scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
@@ -53,3 +59,6 @@ class NativeScaler:
 
     def load_state_dict(self, state_dict):
         self._scaler.load_state_dict(state_dict)
+
+    def get_curtime(self):
+        return self.time()

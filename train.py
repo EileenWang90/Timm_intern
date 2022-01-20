@@ -319,8 +319,9 @@ def _parse_args():
 
 
 def main():
-    setup_default_logging()
     args, args_text = _parse_args()
+    logpath = './output/' + str(datetime.now().strftime("%Y%m%d-%H%M%S")) + args.experiment + '.log'
+    setup_default_logging(log_path=logpath)
     
     if args.log_wandb:
         if has_wandb:
@@ -528,7 +529,7 @@ def main():
         train_interpolation = data_config['interpolation']
     loader_train = create_loader(
         dataset_train,
-        input_size=data_config['input_size'],
+        input_size=(3,160,160), #data_config['input_size'],
         batch_size=args.batch_size,
         is_training=True,
         use_prefetcher=args.prefetcher,
@@ -558,7 +559,7 @@ def main():
 
     loader_eval = create_loader(
         dataset_eval,
-        input_size=data_config['input_size'],
+        input_size=(3,224,224), #data_config['input_size'],
         batch_size=args.validation_batch_size or args.batch_size,
         is_training=False,
         use_prefetcher=args.prefetcher,
@@ -599,7 +600,12 @@ def main():
     output_dir = None
     if args.rank == 0:
         if args.experiment:
-            exp_name = args.experiment
+            tmptime = '-'.join([
+                datetime.now().strftime("%Y%m%d-%H%M%S"),
+                safe_model_name(args.model),
+                str(data_config['input_size'][-1])
+            ])
+            exp_name = args.experiment + tmptime
         else:
             exp_name = '-'.join([
                 datetime.now().strftime("%Y%m%d-%H%M%S"),
@@ -673,15 +679,23 @@ def train_one_epoch(
     batch_time_m = AverageMeter()
     data_time_m = AverageMeter()
     losses_m = AverageMeter()
+    ############ add for detailed time ##########
+    fp_time_m = AverageMeter()
+    bp_time_m = AverageMeter()
+    optimizer_time_m = AverageMeter()
 
     model.train()
 
     end = time.time()
+    datatime = time.time()
+    fptime = time.time()
+    bptime = time.time()
     last_idx = len(loader) - 1
     num_updates = epoch * len(loader)
     for batch_idx, (input, target) in enumerate(loader):
         last_batch = batch_idx == last_idx
-        data_time_m.update(time.time() - end)
+        datatime = time.time()
+        data_time_m.update(datatime - end)
         if not args.prefetcher:
             input, target = input.cuda(), target.cuda()
             if mixup_fn is not None:
@@ -691,6 +705,8 @@ def train_one_epoch(
 
         with amp_autocast():
             output = model(input)
+            fptime = time.time()
+            fp_time_m.update(fptime - datatime)
             loss = loss_fn(output, target)
 
         if not args.distributed:
@@ -703,13 +719,18 @@ def train_one_epoch(
                 clip_grad=args.clip_grad, clip_mode=args.clip_mode,
                 parameters=model_parameters(model, exclude_head='agc' in args.clip_mode),
                 create_graph=second_order)
+            bp_time_m.update(loss_scaler.get_curtime() - fptime)
+            optimizer_time_m.update(time.time() - loss_scaler.get_curtime())
         else:
             loss.backward(create_graph=second_order)
+            bptime = time.time()
+            bp_time_m.update(bptime - fptime)
             if args.clip_grad is not None:
                 dispatch_clip_grad(
                     model_parameters(model, exclude_head='agc' in args.clip_mode),
                     value=args.clip_grad, mode=args.clip_mode)
             optimizer.step()
+            optimizer_time_m.update(time.time() - bptime)
 
         if model_ema is not None:
             model_ema.update(model)
@@ -725,23 +746,43 @@ def train_one_epoch(
                 reduced_loss = reduce_tensor(loss.data, args.world_size)
                 losses_m.update(reduced_loss.item(), input.size(0))
 
+            # if args.local_rank == 0:
+            #     _logger.info(
+            #         'Train: {} [{:>4d}/{} ({:>3.0f}%)]  '
+            #         'Loss: {loss.val:#.4g} ({loss.avg:#.3g})  '
+            #         'Time: {batch_time.val:.3f}s, {rate:>7.2f}/s  '
+            #         '({batch_time.avg:.3f}s, {rate_avg:>7.2f}/s)  '
+            #         'LR: {lr:.3e}  '
+            #         'Data: {data_time.val:.3f} ({data_time.avg:.3f})'.format(
+            #             epoch,
+            #             batch_idx, len(loader),
+            #             100. * batch_idx / last_idx,
+            #             loss=losses_m,
+            #             batch_time=batch_time_m,
+            #             rate=input.size(0) * args.world_size / batch_time_m.val,
+            #             rate_avg=input.size(0) * args.world_size / batch_time_m.avg,
+            #             lr=lr,
+            #             data_time=data_time_m))
+
             if args.local_rank == 0:
                 _logger.info(
                     'Train: {} [{:>4d}/{} ({:>3.0f}%)]  '
-                    'Loss: {loss.val:#.4g} ({loss.avg:#.3g})  '
                     'Time: {batch_time.val:.3f}s, {rate:>7.2f}/s  '
                     '({batch_time.avg:.3f}s, {rate_avg:>7.2f}/s)  '
-                    'LR: {lr:.3e}  '
-                    'Data: {data_time.val:.3f} ({data_time.avg:.3f})'.format(
+                    'Data: {data_time.val:.3f} ({data_time.avg:.3f})  '
+                    'FP: {fp_time.val:.3f} ({fp_time.avg:.3f})  '
+                    'BP: {bp_time.val:.3f} ({bp_time.avg:.3f})  '
+                    'Optimizer: {optimizer_time.val:.3f} ({optimizer_time.avg:.3f})'.format(
                         epoch,
                         batch_idx, len(loader),
                         100. * batch_idx / last_idx,
-                        loss=losses_m,
                         batch_time=batch_time_m,
                         rate=input.size(0) * args.world_size / batch_time_m.val,
                         rate_avg=input.size(0) * args.world_size / batch_time_m.avg,
-                        lr=lr,
-                        data_time=data_time_m))
+                        data_time=data_time_m,
+                        fp_time=fp_time_m,
+                        bp_time=bp_time_m,
+                        optimizer_time=optimizer_time_m))
 
                 if args.save_images and output_dir:
                     torchvision.utils.save_image(
