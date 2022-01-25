@@ -3,6 +3,7 @@
 Hacked together by / Copyright 2020 Ross Wightman
 """
 import torch
+import time
 
 try:
     from apex import amp
@@ -61,4 +62,4 @@ class NativeScaler:
         self._scaler.load_state_dict(state_dict)
 
     def get_curtime(self):
-        return self.time()
+        return self.time

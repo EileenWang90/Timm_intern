@@ -383,6 +383,8 @@ def main():
         bn_eps=args.bn_eps,
         scriptable=args.torchscript,
         checkpoint_path=args.initial_checkpoint)
+    # _logger.info(model)
+    # input("here to stop:")
     if args.num_classes is None:
         assert hasattr(model, 'num_classes'), 'Model must have `num_classes` attr if not set on cmd line/config.'
         args.num_classes = model.num_classes  # FIXME handle model default vs config num_classes more elegantly
@@ -406,7 +408,7 @@ def main():
 
     # move model to GPU, enable channels last layout if set
     model.cuda()
-    if args.channels_last:
+    if args.channels_last:  # https://pytorch.org/tutorials/intermediate/memory_format_tutorial.html
         model = model.to(memory_format=torch.channels_last)
 
     # setup synchronized BatchNorm for distributed training
@@ -708,6 +710,7 @@ def train_one_epoch(
             fptime = time.time()
             fp_time_m.update(fptime - datatime)
             loss = loss_fn(output, target)
+            ### FP32-to-TF32
 
         if not args.distributed:
             losses_m.update(loss.item(), input.size(0))
@@ -723,6 +726,7 @@ def train_one_epoch(
             optimizer_time_m.update(time.time() - loss_scaler.get_curtime())
         else:
             loss.backward(create_graph=second_order)
+            ### FP32-to-TF32
             bptime = time.time()
             bp_time_m.update(bptime - fptime)
             if args.clip_grad is not None:
@@ -730,12 +734,13 @@ def train_one_epoch(
                     model_parameters(model, exclude_head='agc' in args.clip_mode),
                     value=args.clip_grad, mode=args.clip_mode)
             optimizer.step()
+            ### FP32-to-TF32 ?
             optimizer_time_m.update(time.time() - bptime)
 
         if model_ema is not None:
             model_ema.update(model)
 
-        torch.cuda.synchronize()
+        torch.cuda.synchronize()  # Wait for all cores in all streams on the current device to complete.
         num_updates += 1
         batch_time_m.update(time.time() - end)
         if last_batch or batch_idx % args.log_interval == 0:

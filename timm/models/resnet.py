@@ -678,9 +678,11 @@ class ResNet(nn.Module):
         for n, m in self.named_modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+
             elif isinstance(m, nn.BatchNorm2d):
-                nn.init.ones_(m.weight)
+                nn.init.ones_(m.weight)  #int'1065353216' hex'0x3f800000'
                 nn.init.zeros_(m.bias)
+            
         if zero_init_last_bn:
             for m in self.modules():
                 if hasattr(m, 'zero_init_last_bn'):

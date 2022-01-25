@@ -174,7 +174,7 @@ class Lamb(Optimizer):
                 if weight_decay != 0 or group['always_adapt']:
                     # Layer-wise LR adaptation. By default, skip adaptation on parameters that are
                     # excluded from weight decay, unless always_adapt == True, then always enabled.
-                    w_norm = p.norm(2.0)
+                    w_norm = p.norm(2.0) #2-norm
                     g_norm = update.norm(2.0)
                     # FIXME nested where required since logical and/or not working in PT XLA
                     trust_ratio = torch.where(
