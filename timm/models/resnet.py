@@ -722,6 +722,11 @@ def _create_resnet(variant, pretrained=False, **kwargs):
         default_cfg=default_cfgs[variant],
         **kwargs)
 
+###############################################################################
+### hook  
+
+
+
 
 @register_model
 def resnet18(pretrained=False, **kwargs):

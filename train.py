@@ -36,6 +36,7 @@ from timm.loss import *
 from timm.optim import create_optimizer_v2, optimizer_kwargs
 from timm.scheduler import create_scheduler
 from timm.utils import ApexScaler, NativeScaler
+import assistant 
 
 try:
     from apex import amp
@@ -321,7 +322,8 @@ def _parse_args():
 def main():
     args, args_text = _parse_args()
     logpath = './output/' + str(datetime.now().strftime("%Y%m%d-%H%M%S")) + args.experiment + '.log'
-    setup_default_logging(log_path=logpath)
+    # setup_default_logging(log_path=logpath)
+    setup_default_logging()
     
     if args.log_wandb:
         if has_wandb:
@@ -384,7 +386,61 @@ def main():
         scriptable=args.torchscript,
         checkpoint_path=args.initial_checkpoint)
     # _logger.info(model)
+    # for idx,(name,m) in enumerate(model.named_modules()):  #model.named_parameters() m.size; model.named_children(); model.named_modules()
+    #     print(idx,"-",name,m)
     # input("here to stop:")
+    
+    handle=[]
+    # handle = model.conv1.register_forward_pre_hook(assistant.forward_pre_hook) #hook
+    # handle = model.bn1.register_forward_pre_hook(assistant.forward_pre_hook) #hook
+    # handle = model.act1.register_forward_pre_hook(assistant.forward_pre_hook) #hook
+    # handle = model.maxpool.register_forward_pre_hook(assistant.forward_pre_hook) #hook
+    # handle = model.layer1[0].conv1.register_forward_pre_hook(assistant.forward_pre_hook) #hook
+    # handle = model.layer1[0].downsample[0].register_forward_pre_hook(assistant.forward_pre_hook) #hook
+    # handle = model.layer1[0].downsample[1].register_forward_pre_hook(assistant.forward_pre_hook) #hook
+    # handle = model.global_pool.register_forward_pre_hook(assistant.forward_pre_hook) #hook
+    # handle = model.fc.register_forward_pre_hook(assistant.forward_pre_hook) #hook
+    # handle = model.register_forward_pre_hook(assistant.print_hook) #hook
+
+    ##############################################################################################
+    ### Forward Pre Hook
+    from timm.models.layers import SelectAdaptivePool2d
+    layer_type=(nn.Conv2d, nn.BatchNorm2d, nn.ReLU, nn.MaxPool2d, SelectAdaptivePool2d, nn.Linear)
+    for index, (name, child) in enumerate(model.named_children()):
+        # print(index, name, child)
+        if isinstance(child, layer_type):  # manual
+            print('###', index, name, type(child), child)
+            tmpstr = 'model' + '.'+ name + '.register_forward_pre_hook(assistant.forward_pre_hook)'
+            print(tmpstr)
+            handle.append(eval(tmpstr))
+        elif isinstance(child, nn.Sequential):
+            assert name in ('layer1','layer2','layer3','layer4')
+            bottleneckdict={'layer1':3,'layer2':4,'layer3':6,'layer4':3}
+            print('### Sequential',index, name, type(child))#, child)
+            for i in range(bottleneckdict[name]):
+                layername='model.'+name+'['+str(i)+']'
+                # print(layername)
+                for index, (subname, child) in enumerate(eval(layername+'.named_children()')):
+                    # print('---', index, subname, type(child), child)
+                    if isinstance(child, layer_type):  # manual
+                        tmpstr = layername + '.'+ subname + '.register_forward_pre_hook(assistant.forward_pre_hook)'
+                        print(tmpstr)  # model.layer1[0].conv1.register_forward_pre_hook(assistant.forward_pre_hook)
+                        handle.append(eval(tmpstr))
+                    elif isinstance(child, nn.Sequential) and (subname == 'downsample'):
+                        assert subname == 'downsample'
+                        tmpstr0 = layername + '.'+ subname + '[0].register_forward_pre_hook(assistant.forward_pre_hook)'
+                        tmpstr1 = layername + '.'+ subname + '[1].register_forward_pre_hook(assistant.forward_pre_hook)'
+                        print(tmpstr0)
+                        print(tmpstr1)
+                        handle.append(eval(tmpstr0))
+                        handle.append(eval(tmpstr1))
+                        break
+                    else:
+                        _logger.error('Meet unknown layer:', subname, 'when dealing with submodule forward_pre_hook')                
+        else:
+            _logger.error('Meet unknown layer:', name, 'when dealing with forward_pre_hook')
+            # print('ooo', index, name, type(child), child)
+
     if args.num_classes is None:
         assert hasattr(model, 'num_classes'), 'Model must have `num_classes` attr if not set on cmd line/config.'
         args.num_classes = model.num_classes  # FIXME handle model default vs config num_classes more elegantly
@@ -614,13 +670,13 @@ def main():
                 safe_model_name(args.model),
                 str(data_config['input_size'][-1])
             ])
-        output_dir = get_outdir(args.output if args.output else './output/train', exp_name)
+        # output_dir = get_outdir(args.output if args.output else './output/train', exp_name)   #Donot save files
         decreasing = True if eval_metric == 'loss' else False
-        saver = CheckpointSaver(
-            model=model, optimizer=optimizer, args=args, model_ema=model_ema, amp_scaler=loss_scaler,
-            checkpoint_dir=output_dir, recovery_dir=output_dir, decreasing=decreasing, max_history=args.checkpoint_hist)
-        with open(os.path.join(output_dir, 'args.yaml'), 'w') as f:
-            f.write(args_text)
+        # saver = CheckpointSaver(
+        #     model=model, optimizer=optimizer, args=args, model_ema=model_ema, amp_scaler=loss_scaler,
+        #     checkpoint_dir=output_dir, recovery_dir=output_dir, decreasing=decreasing, max_history=args.checkpoint_hist)
+        # with open(os.path.join(output_dir, 'args.yaml'), 'w') as f:
+        #     f.write(args_text)
 
     try:
         for epoch in range(start_epoch, num_epochs):
@@ -630,7 +686,7 @@ def main():
             train_metrics = train_one_epoch(
                 epoch, model, loader_train, optimizer, train_loss_fn, args,
                 lr_scheduler=lr_scheduler, saver=saver, output_dir=output_dir,
-                amp_autocast=amp_autocast, loss_scaler=loss_scaler, model_ema=model_ema, mixup_fn=mixup_fn)
+                amp_autocast=amp_autocast, loss_scaler=loss_scaler, model_ema=model_ema, mixup_fn=mixup_fn,handle=handle)
 
             if args.distributed and args.dist_bn in ('broadcast', 'reduce'):
                 if args.local_rank == 0:
@@ -662,6 +718,9 @@ def main():
 
     except KeyboardInterrupt:
         pass
+    if handle != None:
+        for handle_item in handle:
+            handle_item.remove() #delete after using hook 
     if best_metric is not None:
         _logger.info('*** Best metric: {0} (epoch {1})'.format(best_metric, best_epoch))
 
@@ -669,7 +728,7 @@ def main():
 def train_one_epoch(
         epoch, model, loader, optimizer, loss_fn, args,
         lr_scheduler=None, saver=None, output_dir=None, amp_autocast=suppress,
-        loss_scaler=None, model_ema=None, mixup_fn=None):
+        loss_scaler=None, model_ema=None, mixup_fn=None, handle=None):
 
     if args.mixup_off_epoch and epoch >= args.mixup_off_epoch:
         if args.prefetcher and loader.mixup_enabled:
@@ -711,6 +770,8 @@ def train_one_epoch(
             fp_time_m.update(fptime - datatime)
             loss = loss_fn(output, target)
             ### FP32-to-TF32
+            # if handle != None:
+            #     handle.remove() #delete after using hook 
 
         if not args.distributed:
             losses_m.update(loss.item(), input.size(0))
