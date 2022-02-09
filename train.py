@@ -36,7 +36,6 @@ from timm.loss import *
 from timm.optim import create_optimizer_v2, optimizer_kwargs
 from timm.scheduler import create_scheduler
 from timm.utils import ApexScaler, NativeScaler
-import assistant 
 
 try:
     from apex import amp
@@ -386,60 +385,49 @@ def main():
         scriptable=args.torchscript,
         checkpoint_path=args.initial_checkpoint)
     # _logger.info(model)
-    # for idx,(name,m) in enumerate(model.named_modules()):  #model.named_parameters() m.size; model.named_children(); model.named_modules()
+    # for idx,(name,m) in enumerate(model.named_children()):  #model.named_parameters() m.size; model.named_children(); model.named_modules()
     #     print(idx,"-",name,m)
     # input("here to stop:")
     
-    handle=[]
-    # handle = model.conv1.register_forward_pre_hook(assistant.forward_pre_hook) #hook
-    # handle = model.bn1.register_forward_pre_hook(assistant.forward_pre_hook) #hook
-    # handle = model.act1.register_forward_pre_hook(assistant.forward_pre_hook) #hook
-    # handle = model.maxpool.register_forward_pre_hook(assistant.forward_pre_hook) #hook
-    # handle = model.layer1[0].conv1.register_forward_pre_hook(assistant.forward_pre_hook) #hook
-    # handle = model.layer1[0].downsample[0].register_forward_pre_hook(assistant.forward_pre_hook) #hook
-    # handle = model.layer1[0].downsample[1].register_forward_pre_hook(assistant.forward_pre_hook) #hook
-    # handle = model.global_pool.register_forward_pre_hook(assistant.forward_pre_hook) #hook
-    # handle = model.fc.register_forward_pre_hook(assistant.forward_pre_hook) #hook
-    # handle = model.register_forward_pre_hook(assistant.print_hook) #hook
-
     ##############################################################################################
     ### Forward Pre Hook
     from timm.models.layers import SelectAdaptivePool2d
-    layer_type=(nn.Conv2d, nn.BatchNorm2d, nn.ReLU, nn.MaxPool2d, SelectAdaptivePool2d, nn.Linear)
-    for index, (name, child) in enumerate(model.named_children()):
+    handle=[]
+    # f_fwd = open("./logs/fwd_layers.log", "w+")
+    layer_type=(nn.Conv2d, nn.BatchNorm2d, nn.ReLU, nn.MaxPool2d, nn.AdaptiveAvgPool2d, nn.Linear) #SelectAdaptivePool2d
+    for index, (name, child) in enumerate(model.named_modules()):
         # print(index, name, child)
         if isinstance(child, layer_type):  # manual
-            print('###', index, name, type(child), child)
-            tmpstr = 'model' + '.'+ name + '.register_forward_pre_hook(assistant.forward_pre_hook)'
-            print(tmpstr)
-            handle.append(eval(tmpstr))
-        elif isinstance(child, nn.Sequential):
-            assert name in ('layer1','layer2','layer3','layer4')
-            bottleneckdict={'layer1':3,'layer2':4,'layer3':6,'layer4':3}
-            print('### Sequential',index, name, type(child))#, child)
-            for i in range(bottleneckdict[name]):
-                layername='model.'+name+'['+str(i)+']'
-                # print(layername)
-                for index, (subname, child) in enumerate(eval(layername+'.named_children()')):
-                    # print('---', index, subname, type(child), child)
-                    if isinstance(child, layer_type):  # manual
-                        tmpstr = layername + '.'+ subname + '.register_forward_pre_hook(assistant.forward_pre_hook)'
-                        print(tmpstr)  # model.layer1[0].conv1.register_forward_pre_hook(assistant.forward_pre_hook)
-                        handle.append(eval(tmpstr))
-                    elif isinstance(child, nn.Sequential) and (subname == 'downsample'):
-                        assert subname == 'downsample'
-                        tmpstr0 = layername + '.'+ subname + '[0].register_forward_pre_hook(assistant.forward_pre_hook)'
-                        tmpstr1 = layername + '.'+ subname + '[1].register_forward_pre_hook(assistant.forward_pre_hook)'
-                        print(tmpstr0)
-                        print(tmpstr1)
-                        handle.append(eval(tmpstr0))
-                        handle.append(eval(tmpstr1))
-                        break
-                    else:
-                        _logger.error('Meet unknown layer:', subname, 'when dealing with submodule forward_pre_hook')                
-        else:
-            _logger.error('Meet unknown layer:', name, 'when dealing with forward_pre_hook')
-            # print('ooo', index, name, type(child), child)
+            # f_fwd.write("###{0} {1} {2} {3}\n".format(index, name, type(child), child))
+            handle.append(child.register_forward_pre_hook(forward_pre_hook))            
+    #     else:
+    #         f_fwd.write("ooo{0} {1} {2} {3}\n".format(index, name, type(child), child))
+    # f_fwd.close()
+    ##############################################################################################
+    ### Barkward Hook for data gradients
+    # f_bwd = open("./logs/bwd_layers.log", "w+")
+    for index, (name, child) in enumerate(model.named_modules()):
+        # print(index, name, child)
+        if isinstance(child, layer_type):  # manual
+            # f_bwd.write("###{0} {1} {2} {3}\n".format(index, name, type(child), child))
+            handle.append(child.register_full_backward_hook(backward_hook))  
+            # handle.append(child.register_hook(register_hook))          
+    #     else:
+    #         f_bwd.write("ooo{0} {1} {2} {3}\n".format(index, name, type(child), child))
+    # f_bwd.close()
+    ##############################################################################################
+    # ### Barkward Hook for weight gradients
+    # f_bwdw = open("./logs/bwd_parameters.log", "w+")
+    # for index, (name, para) in enumerate(model.named_parameters()):
+    #     # print(index, name, para)
+    #     if isinstance(para, layer_type):  # manual
+    #         f_bwdw.write("###{0} {1} {2} {3}\n".format(index, name, type(para), para.data.shape)) 
+    #         handle.append(para.data.register_hook(register_hook))          
+    #     else:
+    #         f_bwdw.write("ooo{0} {1} {2} {3}\n".format(index, name, type(para), para.data.shape))
+    # f_bwdw.close()
+
+    
 
     if args.num_classes is None:
         assert hasattr(model, 'num_classes'), 'Model must have `num_classes` attr if not set on cmd line/config.'
@@ -636,8 +624,9 @@ def main():
         train_loss_fn = JsdCrossEntropy(num_splits=num_aug_splits, smoothing=args.smoothing)
     elif mixup_active:
         # smoothing is handled with mixup target transform which outputs sparse, soft targets
+        # print("smoothing:", args.smoothing) #args.smoothing is useless
         if args.bce_loss:
-            train_loss_fn = BinaryCrossEntropy(target_threshold=args.bce_target_thresh)
+            train_loss_fn = BinaryCrossEntropy(target_threshold=args.bce_target_thresh) # this
         else:
             train_loss_fn = SoftTargetCrossEntropy()
     elif args.smoothing:
@@ -648,6 +637,10 @@ def main():
     else:
         train_loss_fn = nn.CrossEntropyLoss()
     train_loss_fn = train_loss_fn.cuda()
+    # loss cast
+    handle.append(train_loss_fn.register_forward_pre_hook(forward_pre_hook)) # forward_pre_hook_verbose
+    handle.append(train_loss_fn.register_forward_hook(forward_hook)) # forward_hook_verbose
+
     validate_loss_fn = nn.CrossEntropyLoss().cuda()
 
     # setup checkpoint saver and eval metric tracking
@@ -770,8 +763,7 @@ def train_one_epoch(
             fp_time_m.update(fptime - datatime)
             loss = loss_fn(output, target)
             ### FP32-to-TF32
-            # if handle != None:
-            #     handle.remove() #delete after using hook 
+            # loss = cast_fp32_tf32_inplace(loss)
 
         if not args.distributed:
             losses_m.update(loss.item(), input.size(0))

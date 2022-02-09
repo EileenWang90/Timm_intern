@@ -18,6 +18,7 @@ from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from .helpers import build_model_with_cfg
 from .layers import DropBlock2d, DropPath, AvgPool2dSame, BlurPool2d, GroupNorm, create_attn, get_attn, create_classifier
 from .registry import register_model
+from timm.utils import cast_fp32_tf32, cast_fp32_tf32_inplace
 
 __all__ = ['ResNet', 'BasicBlock', 'Bottleneck']  # model_registry will add each entrypoint fn to this
 
@@ -329,7 +330,7 @@ class BasicBlock(nn.Module):
             inplanes, first_planes, kernel_size=3, stride=1 if use_aa else stride, padding=first_dilation,
             dilation=first_dilation, bias=False)
         self.bn1 = norm_layer(first_planes)
-        self.act1 = act_layer(inplace=True)
+        self.act1 = act_layer(inplace=False) #
         self.aa = create_aa(aa_layer, channels=first_planes, stride=stride, enable=use_aa)
 
         self.conv2 = nn.Conv2d(
@@ -338,7 +339,7 @@ class BasicBlock(nn.Module):
 
         self.se = create_attn(attn_layer, outplanes)
 
-        self.act2 = act_layer(inplace=True)
+        self.act2 = act_layer(inplace=False) #
         self.downsample = downsample
         self.stride = stride
         self.dilation = dilation
@@ -394,13 +395,13 @@ class Bottleneck(nn.Module):
 
         self.conv1 = nn.Conv2d(inplanes, first_planes, kernel_size=1, bias=False)
         self.bn1 = norm_layer(first_planes)
-        self.act1 = act_layer(inplace=True)
+        self.act1 = act_layer(inplace=False) #
 
         self.conv2 = nn.Conv2d(
             first_planes, width, kernel_size=3, stride=1 if use_aa else stride,
             padding=first_dilation, dilation=first_dilation, groups=cardinality, bias=False)
         self.bn2 = norm_layer(width)
-        self.act2 = act_layer(inplace=True)
+        self.act2 = act_layer(inplace=False) #
         self.aa = create_aa(aa_layer, channels=width, stride=stride, enable=use_aa)
 
         self.conv3 = nn.Conv2d(width, outplanes, kernel_size=1, bias=False)
@@ -408,7 +409,7 @@ class Bottleneck(nn.Module):
 
         self.se = create_attn(attn_layer, outplanes)
 
-        self.act3 = act_layer(inplace=True)
+        self.act3 = act_layer(inplace=False) #
         self.downsample = downsample
         self.stride = stride
         self.dilation = dilation
@@ -448,8 +449,14 @@ class Bottleneck(nn.Module):
 
         if self.downsample is not None:
             shortcut = self.downsample(shortcut)
-        x += shortcut
-        x = self.act3(x)
+            
+        # ### previous
+        # x += shortcut 
+        # x = self.act3(x) 
+
+        #### modified
+        y = x + shortcut 
+        x = self.act3(y) 
 
         return x
 
@@ -627,15 +634,15 @@ class ResNet(nn.Module):
             self.conv1 = nn.Sequential(*[
                 nn.Conv2d(in_chans, stem_chs[0], 3, stride=2, padding=1, bias=False),
                 norm_layer(stem_chs[0]),
-                act_layer(inplace=True),
+                act_layer(inplace=False), #
                 nn.Conv2d(stem_chs[0], stem_chs[1], 3, stride=1, padding=1, bias=False),
                 norm_layer(stem_chs[1]),
-                act_layer(inplace=True),
+                act_layer(inplace=False), #
                 nn.Conv2d(stem_chs[1], inplanes, 3, stride=1, padding=1, bias=False)])
         else:
             self.conv1 = nn.Conv2d(in_chans, inplanes, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = norm_layer(inplanes)
-        self.act1 = act_layer(inplace=True)
+        self.act1 = act_layer(inplace=False) #
         self.feature_info = [dict(num_chs=inplanes, reduction=2, module='act1')]
 
         # Stem pooling. The name 'maxpool' remains for weight compatibility.
@@ -644,7 +651,7 @@ class ResNet(nn.Module):
                 nn.Conv2d(inplanes, inplanes, 3, stride=1 if aa_layer else 2, padding=1, bias=False),
                 create_aa(aa_layer, channels=inplanes, stride=2),
                 norm_layer(inplanes),
-                act_layer(inplace=True)
+                act_layer(inplace=False) #
             ]))
         else:
             if aa_layer is not None:
@@ -678,10 +685,26 @@ class ResNet(nn.Module):
         for n, m in self.named_modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                # # weight-initial  FP32-to-TF32 cast
+                # print('Conv before cast:', type(m.weight.data),len(m.weight.data), m.weight.data.shape, m.weight.data[0][0].shape)  #before cast: <class 'torch.Tensor'> 64 torch.Size([64, 3, 7, 7]) torch.Size([7])
+                # # type(m.weight):<class 'torch.nn.parameter.Parameter'>, type(m.weight.data):type(m.weight.data)
+                # print('Conv before cast:', m.weight.data[0][0])
+                m.weight.data = cast_fp32_tf32(m.weight.data)
+                # print('Conv after cast:', type(m.weight.data),len(m.weight.data), m.weight.data.shape, m.weight.data[0][0].shape) 
+                # print('Conv after cast:', m.weight.data[0][0])
 
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.ones_(m.weight)  #int'1065353216' hex'0x3f800000'
                 nn.init.zeros_(m.bias)
+            
+            elif isinstance(m, nn.Linear): #weight-initial  FP32-to-TF32 cast
+                # weight-initial  FP32-to-TF32 cast
+                # print('FC before cast:', type(m.weight.data),len(m.weight.data), m.weight.data.shape) #before cast: <class 'torch.Tensor'> 1000 torch.Size([1000, 2048])
+                # print('FC before cast:', m.weight.data[0])
+                m.weight.data = cast_fp32_tf32(m.weight.data)
+                m.bias.data = cast_fp32_tf32(m.bias.data)
+                # print('FC after cast:', type(m.weight.data),len(m.weight.data), m.weight.data.shape) 
+                # print('FC after cast:', m.weight.data[0])
             
         if zero_init_last_bn:
             for m in self.modules():

@@ -23,6 +23,7 @@ class BinaryCrossEntropy(nn.Module):
         self.reduction = reduction
         self.register_buffer('weight', weight)
         self.register_buffer('pos_weight', pos_weight)
+        # print('BinaryCrossEntropy:',self.smoothing, self.target_threshold, self.reduction, weight, pos_weight) #BinaryCrossEntropy: 0.1 None mean None None
 
     def forward(self, x: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         assert x.shape[0] == target.shape[0]
