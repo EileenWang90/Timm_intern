@@ -31,7 +31,8 @@ drop_path: null
 epoch_repeats: 0.0
 epochs: 100
 eval_metric: top1
-experiment: ResNetv1.5FP32
+experiment: ResNetv1.5AMP
+fuser: ''
 gp: null
 hflip: 0.5
 img_size: null
@@ -44,7 +45,7 @@ interpolation: ''
 jsd_loss: false
 local_rank: 0
 log_interval: 50
-log_wandb: false
+log_wandb: true
 lr: 0.008
 lr_cycle_decay: 0.5
 lr_cycle_limit: 1

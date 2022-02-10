@@ -1,31 +1,37 @@
 import matplotlib.pyplot as plt
 
-filelist = ['20220118ResNetV1.5FP32','20220119ResNetV1.5TF32']
+filelist = ['20220118ResNetV1.5FP32','20220119ResNetV1.5TF32','20220209ResNetV1.5AMP']
 filepath = './interlog/'
 # filename = filelist[0] 
 
-##########################################################################
-### file preprocess
-# for filename in filelist:
-#     f_in = open(filename+'.log',"r+")
-#     f_train_out = open(filepath+filename+'_train.log',"w+")
-#     f_eval_out = open(filepath+filename+'_eval.log',"w+")
-#     count=0
-#     for readline in f_in.readlines():
-#         # if readline.startswith('Train: ') or readline.startswith('Test: '):
-#         if (readline.startswith('Train: ') and readline.find('100%')!= -1): 
-#             count += 1
-#             # print(readline.find('100%'))
-#             f_train_out.write(readline)
-#         if readline.startswith('Test: [  24/24]  '):
-#             f_eval_out.write(readline)
-#         # if count==20:
-#         #     break
-#     f_in.close()
-#     f_train_out.close()
-#     f_eval_out.close()
+#########################################################################
+## file preprocess
+for filename in filelist:
+    f_in = open(filename+'.log',"r+")
+    f_train_out = open(filepath+filename+'_train.log',"w+")
+    f_eval_out = open(filepath+filename+'_eval.log',"w+")
+    count=0
+    for readline in f_in.readlines():
+        readline = readline[61:] #get rid of training time
+        # num = readline.rfind("Train: ") #61
+        # print(num, readline)
+        # if(num != -1):
+        #     input('here to stop')
+        
+        # if readline.startswith('Train: ') or readline.startswith('Test: '):
+        if (readline.startswith('Train: ') and readline.find('100%')!= -1): 
+            count += 1
+            # print(readline.find('100%'))
+            f_train_out.write(readline)
+        if readline.startswith('Test: [  24/24]  '):
+            f_eval_out.write(readline)
+        # if count==20:
+        #     break
+    f_in.close()
+    f_train_out.close()
+    f_eval_out.close()
 
-##########################################################################
+#########################################################################
 ### get loss list
 train_loss_whole=[]
 eval_loss_whole=[]

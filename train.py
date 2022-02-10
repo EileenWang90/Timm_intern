@@ -399,13 +399,19 @@ def main():
         # print(index, name, child)
         if isinstance(child, layer_type):  # manual
             # f_fwd.write("###{0} {1} {2} {3}\n".format(index, name, type(child), child))
-            handle.append(child.register_forward_pre_hook(forward_pre_hook))            
+            # if index == 1: # for validation
+            #     handle.append(child.register_forward_pre_hook(forward_pre_hook_verbose))  
+            #     handle.append(child.register_forward_hook(forward_hook)) 
+            # else:
+            #     handle.append(child.register_forward_pre_hook(forward_pre_hook))    
+            handle.append(child.register_forward_pre_hook(forward_pre_hook)) 
     #     else:
     #         f_fwd.write("ooo{0} {1} {2} {3}\n".format(index, name, type(child), child))
     # f_fwd.close()
     ##############################################################################################
     ### Barkward Hook for data gradients
     # f_bwd = open("./logs/bwd_layers.log", "w+")
+    layer_type=(nn.Conv2d, nn.BatchNorm2d, nn.ReLU, nn.MaxPool2d, nn.AdaptiveAvgPool2d, nn.Linear) #SelectAdaptivePool2d
     for index, (name, child) in enumerate(model.named_modules()):
         # print(index, name, child)
         if isinstance(child, layer_type):  # manual
@@ -416,15 +422,12 @@ def main():
     #         f_bwd.write("ooo{0} {1} {2} {3}\n".format(index, name, type(child), child))
     # f_bwd.close()
     ##############################################################################################
-    # ### Barkward Hook for weight gradients
+    ### Barkward Hook for weight gradients
     # f_bwdw = open("./logs/bwd_parameters.log", "w+")
-    # for index, (name, para) in enumerate(model.named_parameters()):
-    #     # print(index, name, para)
-    #     if isinstance(para, layer_type):  # manual
-    #         f_bwdw.write("###{0} {1} {2} {3}\n".format(index, name, type(para), para.data.shape)) 
-    #         handle.append(para.data.register_hook(register_hook))          
-    #     else:
-    #         f_bwdw.write("ooo{0} {1} {2} {3}\n".format(index, name, type(para), para.data.shape))
+    for index, (name, para) in enumerate(model.named_parameters()):
+        # print(index, name, para)
+        # f_bwdw.write("###{0} {1} {2} {3}\n".format(index, name, type(para), para.data.shape)) 
+        handle.append(para.register_hook(register_hook))          
     # f_bwdw.close()
 
     

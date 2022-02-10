@@ -55,6 +55,7 @@ import math
 
 import torch
 from torch.optim import Optimizer
+from timm.utils.castTF32 import cast_fp32_tf32, cast_fp32_tf32_float
 
 
 class Lamb(Optimizer):
@@ -87,10 +88,22 @@ class Lamb(Optimizer):
     def __init__(
             self, params, lr=1e-3, bias_correction=True, betas=(0.9, 0.999), eps=1e-6,
             weight_decay=0.01, grad_averaging=True, max_grad_norm=1.0, trust_clip=False, always_adapt=False):
+        # init-weights cast
+        lr = cast_fp32_tf32_float(lr) #AttributeError: 'float' object has no attribute 'view'  0.008 -> 0.008
+        eps = cast_fp32_tf32_float(eps) #1e-06 -> 9.9931e-07
+        betas = (cast_fp32_tf32_float(betas[0]), cast_fp32_tf32_float(betas[1])) #(0.9, 0.999) -> (0.8999, 0.9985)
+        weight_decay = cast_fp32_tf32_float(weight_decay)
+        max_grad_norm = cast_fp32_tf32_float(max_grad_norm)
+
         defaults = dict(
             lr=lr, bias_correction=bias_correction, betas=betas, eps=eps, weight_decay=weight_decay,
             grad_averaging=grad_averaging, max_grad_norm=max_grad_norm,
             trust_clip=trust_clip, always_adapt=always_adapt)
+        print(defaults) 
+        #{'lr': 0.008, 'bias_correction': True, 'betas': (0.9, 0.999), 'eps': 1e-06, 'weight_decay': 0.0, 'grad_averaging': True, 'max_grad_norm': 1.0, 'trust_clip': False, 'always_adapt': False}
+        # {'lr': 0.00800323486328125, 'bias_correction': True, 'betas': (0.89990234375, 0.9990234375), 'eps': 1.000240445137024e-06, 'weight_decay': 0.0, 'grad_averaging': True, 'max_grad_norm': 1.0, 'trust_clip': False, 'always_adapt': False}
+        input('---stop here---')    
+
         super().__init__(params, defaults)
 
     @torch.no_grad()
@@ -161,28 +174,28 @@ class Lamb(Optimizer):
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
 
                 # Decay the first and second moment running average coefficient
-                exp_avg.mul_(beta1).add_(grad, alpha=beta3)  # m_t
+                exp_avg.mul_(beta1).add_(grad, alpha=beta3)  # m_t    calculate inplace
                 exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)  # v_t
 
                 denom = (exp_avg_sq.sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
-                update = (exp_avg / bias_correction1).div_(denom)
+                update = (exp_avg / bias_correction1).div_(denom) #rt
 
                 weight_decay = group['weight_decay']
                 if weight_decay != 0:
-                    update.add_(p, alpha=weight_decay)
+                    update.add_(p, alpha=weight_decay) #rt + \lambda \theta_{t-1}
 
-                if weight_decay != 0 or group['always_adapt']:
+                if weight_decay != 0 or group['always_adapt']: #group['always_adapt']=False
                     # Layer-wise LR adaptation. By default, skip adaptation on parameters that are
                     # excluded from weight decay, unless always_adapt == True, then always enabled.
-                    w_norm = p.norm(2.0) #2-norm
-                    g_norm = update.norm(2.0)
+                    w_norm = p.norm(2.0) #2-norm  
+                    g_norm = update.norm(2.0) 
                     # FIXME nested where required since logical and/or not working in PT XLA
                     trust_ratio = torch.where(
                         w_norm > 0,
                         torch.where(g_norm > 0, w_norm / g_norm, one_tensor),
                         one_tensor,
                     )
-                    if group['trust_clip']:
+                    if group['trust_clip']: #group['trust_clip']=False
                         # LAMBC trust clipping, upper bound fixed at one
                         trust_ratio = torch.minimum(trust_ratio, one_tensor)
                     update.mul_(trust_ratio)

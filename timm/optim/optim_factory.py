@@ -122,6 +122,8 @@ def create_optimizer_v2(
     opt_args = dict(weight_decay=weight_decay, **kwargs)
     if lr is not None:
         opt_args.setdefault('lr', lr)
+    # print(opt_args) #{'weight_decay': 0.0, 'lr': 0.008}
+    # input('---stop here---')
 
     # basic SGD & related
     if opt_lower == 'sgd' or opt_lower == 'nesterov':
