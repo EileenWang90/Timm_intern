@@ -99,10 +99,10 @@ class Lamb(Optimizer):
             lr=lr, bias_correction=bias_correction, betas=betas, eps=eps, weight_decay=weight_decay,
             grad_averaging=grad_averaging, max_grad_norm=max_grad_norm,
             trust_clip=trust_clip, always_adapt=always_adapt)
-        print(defaults) 
-        #{'lr': 0.008, 'bias_correction': True, 'betas': (0.9, 0.999), 'eps': 1e-06, 'weight_decay': 0.0, 'grad_averaging': True, 'max_grad_norm': 1.0, 'trust_clip': False, 'always_adapt': False}
-        # {'lr': 0.00800323486328125, 'bias_correction': True, 'betas': (0.89990234375, 0.9990234375), 'eps': 1.000240445137024e-06, 'weight_decay': 0.0, 'grad_averaging': True, 'max_grad_norm': 1.0, 'trust_clip': False, 'always_adapt': False}
-        input('---stop here---')    
+        # print(defaults) 
+        # # {'lr': 0.008, 'bias_correction': True, 'betas': (0.9, 0.999), 'eps': 1e-06, 'weight_decay': 0.0, 'grad_averaging': True, 'max_grad_norm': 1.0, 'trust_clip': False, 'always_adapt': False}
+        # # {'lr': 0.00800323486328125, 'bias_correction': True, 'betas': (0.89990234375, 0.9990234375), 'eps': 1.000240445137024e-06, 'weight_decay': 0.0, 'grad_averaging': True, 'max_grad_norm': 1.0, 'trust_clip': False, 'always_adapt': False}
+        # input('---stop here---')    
 
         super().__init__(params, defaults)
 
@@ -122,7 +122,7 @@ class Lamb(Optimizer):
         one_tensor = torch.tensor(1.0, device=device)  # because torch.where doesn't handle scalars correctly
         global_grad_norm = torch.zeros(1, device=device)
         for group in self.param_groups:
-            for p in group['params']:
+            for p in group['params']: #p already cast in backward
                 if p.grad is None:
                     continue
                 grad = p.grad
@@ -131,13 +131,18 @@ class Lamb(Optimizer):
                 global_grad_norm.add_(grad.pow(2).sum())
 
         global_grad_norm = torch.sqrt(global_grad_norm)
+        # add for cast
+        # global_grad_norm = cast_fp32_tf32(global_grad_norm) 
+
         # FIXME it'd be nice to remove explicit tensor conversion of scalars when torch.where promotes
         # scalar types properly https://github.com/pytorch/pytorch/issues/9190
-        max_grad_norm = torch.tensor(self.defaults['max_grad_norm'], device=device)
+        max_grad_norm = torch.tensor(self.defaults['max_grad_norm'], device=device) #1.0
         clip_global_grad_norm = torch.where(
             global_grad_norm > max_grad_norm,
             global_grad_norm / max_grad_norm,
-            one_tensor)
+            one_tensor) 
+        # add for cast
+        # clip_global_grad_norm = cast_fp32_tf32(clip_global_grad_norm) 
 
         for group in self.param_groups:
             bias_correction = 1 if group['bias_correction'] else 0
@@ -157,6 +162,9 @@ class Lamb(Optimizer):
                 bias_correction2 = 1 - beta2 ** group['step']
             else:
                 bias_correction1, bias_correction2 = 1.0, 1.0
+            # add for cast
+            # bias_correction1 = cast_fp32_tf32_float(bias_correction1) 
+            # bias_correction2 = cast_fp32_tf32_float(bias_correction2)
 
             for p in group['params']:
                 if p.grad is None:
@@ -176,13 +184,23 @@ class Lamb(Optimizer):
                 # Decay the first and second moment running average coefficient
                 exp_avg.mul_(beta1).add_(grad, alpha=beta3)  # m_t    calculate inplace
                 exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)  # v_t
+                # add for cast
+                exp_avg = cast_fp32_tf32(exp_avg) 
+                exp_avg_sq = cast_fp32_tf32(exp_avg_sq) 
 
                 denom = (exp_avg_sq.sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
+                # add for cast
+                # denom = cast_fp32_tf32(denom) 
+
                 update = (exp_avg / bias_correction1).div_(denom) #rt
+                # add for cast
+                # update = cast_fp32_tf32(update) 
 
                 weight_decay = group['weight_decay']
                 if weight_decay != 0:
                     update.add_(p, alpha=weight_decay) #rt + \lambda \theta_{t-1}
+                # add for cast
+                # update = cast_fp32_tf32(update) 
 
                 if weight_decay != 0 or group['always_adapt']: #group['always_adapt']=False
                     # Layer-wise LR adaptation. By default, skip adaptation on parameters that are
@@ -199,7 +217,11 @@ class Lamb(Optimizer):
                         # LAMBC trust clipping, upper bound fixed at one
                         trust_ratio = torch.minimum(trust_ratio, one_tensor)
                     update.mul_(trust_ratio)
+                    # add for cast
+                    update = cast_fp32_tf32(update) 
 
                 p.add_(update, alpha=-group['lr'])
+                # add for cast
+                p = cast_fp32_tf32(p) 
 
         return loss
