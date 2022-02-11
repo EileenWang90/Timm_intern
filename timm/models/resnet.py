@@ -692,6 +692,7 @@ class ResNet(nn.Module):
                 m.weight.data = cast_fp32_tf32(m.weight.data)
                 # print('Conv after cast:', type(m.weight.data),len(m.weight.data), m.weight.data.shape, m.weight.data[0][0].shape) 
                 # print('Conv after cast:', m.weight.data[0][0])
+                # todo bias
 
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.ones_(m.weight)  #int'1065353216' hex'0x3f800000'

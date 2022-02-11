@@ -185,8 +185,8 @@ class Lamb(Optimizer):
                 exp_avg.mul_(beta1).add_(grad, alpha=beta3)  # m_t    calculate inplace
                 exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)  # v_t
                 # add for cast
-                exp_avg = cast_fp32_tf32(exp_avg) 
-                exp_avg_sq = cast_fp32_tf32(exp_avg_sq) 
+                # exp_avg = cast_fp32_tf32(exp_avg) 
+                # exp_avg_sq = cast_fp32_tf32(exp_avg_sq) 
 
                 denom = (exp_avg_sq.sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
                 # add for cast
@@ -218,7 +218,7 @@ class Lamb(Optimizer):
                         trust_ratio = torch.minimum(trust_ratio, one_tensor)
                     update.mul_(trust_ratio)
                     # add for cast
-                    update = cast_fp32_tf32(update) 
+                    # update = cast_fp32_tf32(update) 
 
                 p.add_(update, alpha=-group['lr'])
                 # add for cast

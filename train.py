@@ -807,43 +807,44 @@ def train_one_epoch(
                 reduced_loss = reduce_tensor(loss.data, args.world_size)
                 losses_m.update(reduced_loss.item(), input.size(0))
 
-            # if args.local_rank == 0:
-            #     _logger.info(
-            #         'Train: {} [{:>4d}/{} ({:>3.0f}%)]  '
-            #         'Loss: {loss.val:#.4g} ({loss.avg:#.3g})  '
-            #         'Time: {batch_time.val:.3f}s, {rate:>7.2f}/s  '
-            #         '({batch_time.avg:.3f}s, {rate_avg:>7.2f}/s)  '
-            #         'LR: {lr:.3e}  '
-            #         'Data: {data_time.val:.3f} ({data_time.avg:.3f})'.format(
-            #             epoch,
-            #             batch_idx, len(loader),
-            #             100. * batch_idx / last_idx,
-            #             loss=losses_m,
-            #             batch_time=batch_time_m,
-            #             rate=input.size(0) * args.world_size / batch_time_m.val,
-            #             rate_avg=input.size(0) * args.world_size / batch_time_m.avg,
-            #             lr=lr,
-            #             data_time=data_time_m))
-
             if args.local_rank == 0:
                 _logger.info(
                     'Train: {} [{:>4d}/{} ({:>3.0f}%)]  '
+                    'Loss: {loss.val:#.4g} ({loss.avg:#.3g})  '
                     'Time: {batch_time.val:.3f}s, {rate:>7.2f}/s  '
                     '({batch_time.avg:.3f}s, {rate_avg:>7.2f}/s)  '
-                    'Data: {data_time.val:.3f} ({data_time.avg:.3f})  '
-                    'FP: {fp_time.val:.3f} ({fp_time.avg:.3f})  '
-                    'BP: {bp_time.val:.3f} ({bp_time.avg:.3f})  '
-                    'Optimizer: {optimizer_time.val:.3f} ({optimizer_time.avg:.3f})'.format(
+                    'LR: {lr:.3e}  '
+                    'Data: {data_time.val:.3f} ({data_time.avg:.3f})'.format(
                         epoch,
                         batch_idx, len(loader),
                         100. * batch_idx / last_idx,
+                        loss=losses_m,
                         batch_time=batch_time_m,
                         rate=input.size(0) * args.world_size / batch_time_m.val,
                         rate_avg=input.size(0) * args.world_size / batch_time_m.avg,
-                        data_time=data_time_m,
-                        fp_time=fp_time_m,
-                        bp_time=bp_time_m,
-                        optimizer_time=optimizer_time_m))
+                        lr=lr,
+                        data_time=data_time_m))
+
+            ### for analyzing time
+            # if args.local_rank == 0:
+            #     _logger.info(
+            #         'Train: {} [{:>4d}/{} ({:>3.0f}%)]  '
+            #         'Time: {batch_time.val:.3f}s, {rate:>7.2f}/s  '
+            #         '({batch_time.avg:.3f}s, {rate_avg:>7.2f}/s)  '
+            #         'Data: {data_time.val:.3f} ({data_time.avg:.3f})  '
+            #         'FP: {fp_time.val:.3f} ({fp_time.avg:.3f})  '
+            #         'BP: {bp_time.val:.3f} ({bp_time.avg:.3f})  '
+            #         'Optimizer: {optimizer_time.val:.3f} ({optimizer_time.avg:.3f})'.format(
+            #             epoch,
+            #             batch_idx, len(loader),
+            #             100. * batch_idx / last_idx,
+            #             batch_time=batch_time_m,
+            #             rate=input.size(0) * args.world_size / batch_time_m.val,
+            #             rate_avg=input.size(0) * args.world_size / batch_time_m.avg,
+            #             data_time=data_time_m,
+            #             fp_time=fp_time_m,
+            #             bp_time=bp_time_m,
+            #             optimizer_time=optimizer_time_m))
 
                 if args.save_images and output_dir:
                     torchvision.utils.save_image(

@@ -74,23 +74,17 @@ def print_hook(module, inputdata):
             print('ooo', index, name, type(child), child)
     # for idx,(name,m) in enumerate(module.named_parameters()):
     #     print(idx,"-",name,m.size())
-
     submodules=[]
     if isinstance(submodules, str):
         submodules = [submodules]
-
     named_modules = submodules
     submodules = [module.get_submodule(m) for m in submodules]
-
     if not len(submodules):
         named_modules, submodules = list(zip(*module.named_children()))
-
     for name, m in zip(named_modules, submodules):
         print(idx,"-",name,m)
-
     # for idx,(name,m) in enumerate(module._modules.items()):
     #     print(idx,"-",name,m)
-
     input('Here to stop!')
 
 @torch.no_grad()
@@ -127,46 +121,55 @@ def cast_fp32_tf32(input, mode="rne"):  # type(input) != tuple
 @torch.no_grad()
 def cast_fp32_tf32_float(input, mode="rne"):  # type(input) != tuple
     input = torch.tensor(input)
-    output = cast_fp32_tf32(input, mode="rne")
+    output = cast_fp32_tf32(input, mode=mode)
     output = float(output)
     return output
-
 
 @torch.no_grad()
 def cast_fp32_tf32_tuple(input_tuple, mode="rne"):  # type(input)=tuple
     assert type(input_tuple) == tuple
-
     output_list=[]
     for input in input_tuple: 
-        # print('input:',input[0][0][0][0])
-        in_int = input.view(torch.int32)
-        # print('in_int:',in_int[0][0][0])
-        mask = torch.tensor(0xffffe000, dtype=torch.int32)
-    
-        if mode == "trunc":
-            output = torch.bitwise_and(in_int, mask).view(torch.float)
-            return (output,)
-    
-        in_size = input.size()
-        in_round = torch.zeros(in_size, dtype=torch.int32)
-    
-        # we don't round nan and inf
-        do_round = torch.ones(in_size, dtype=torch.bool)
-        nan_mask = torch.tensor(0x7f800000, dtype=torch.int32)
-        do_round = torch.where(torch.bitwise_and(in_int, nan_mask) == 0x7f800000, False, True)
-    
-        # perform round nearest tie even
-        sr = torch.tensor(13, dtype=torch.int32)
-        one = torch.tensor(1, dtype=torch.int32)
-        point5 = torch.tensor(0x00000fff, dtype=torch.int32)
-        fixup = torch.bitwise_and(torch.bitwise_right_shift(in_int, sr), one)
-        in_round = in_int + point5 + fixup
-        in_round = torch.where(do_round, in_round, in_int)
-    
-        mask = torch.tensor(0xffffe000, dtype=torch.int32)
-    
-        output = torch.bitwise_and(in_round, mask).view(torch.float).requires_grad_(True) # add .requires_grad_(True)
-        # print('output:',output[0][0][0])
-        output_list.append(output)
- 
+        output = cast_fp32_tf32(input, mode=mode)
+        output_list.append(output.requires_grad_(True))
     return tuple(output_list)
+
+# @torch.no_grad()
+# def cast_fp32_tf32_tuple(input_tuple, mode="rne"):  # type(input)=tuple
+#     assert type(input_tuple) == tuple
+
+#     output_list=[]
+#     for input in input_tuple: 
+#         # print('input:',input[0][0][0][0])
+#         in_int = input.view(torch.int32)
+#         # print('in_int:',in_int[0][0][0])
+#         mask = torch.tensor(0xffffe000, dtype=torch.int32)
+    
+#         if mode == "trunc":
+#             output = torch.bitwise_and(in_int, mask).view(torch.float)
+#             return (output,)
+    
+#         in_size = input.size()
+#         in_round = torch.zeros(in_size, dtype=torch.int32)
+    
+#         # we don't round nan and inf
+#         do_round = torch.ones(in_size, dtype=torch.bool)
+#         nan_mask = torch.tensor(0x7f800000, dtype=torch.int32)
+#         do_round = torch.where(torch.bitwise_and(in_int, nan_mask) == 0x7f800000, False, True)
+    
+#         # perform round nearest tie even
+#         sr = torch.tensor(13, dtype=torch.int32)
+#         one = torch.tensor(1, dtype=torch.int32)
+#         point5 = torch.tensor(0x00000fff, dtype=torch.int32)
+#         fixup = torch.bitwise_and(torch.bitwise_right_shift(in_int, sr), one)
+#         in_round = in_int + point5 + fixup
+#         in_round = torch.where(do_round, in_round, in_int)
+    
+#         mask = torch.tensor(0xffffe000, dtype=torch.int32)
+    
+#         output = torch.bitwise_and(in_round, mask).view(torch.float).requires_grad_(True) # add .requires_grad_(True)
+#         # print('output:',output[0][0][0])
+#         output_list.append(output)
+ 
+#     return tuple(output_list)
+
