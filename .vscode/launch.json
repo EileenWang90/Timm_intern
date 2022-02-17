@@ -1,0 +1,21 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: 当前文件",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}", 
+            "console": "integratedTerminal",
+            "args": ["/data/pytorch/datasets/imagenet_training",
+            "--model","resnet50","--sched","cosine","--epochs","100",
+            "--input-size","3","160","160","--opt","lamb","--warmup-epochs","5",
+            "--cooldown-epochs","0","--lr","8e-3","--weight-decay","0.02",
+            "--batch-size","256","--mixup","0.1","--cutmix","1.0",
+            "--smoothing","0.0","--bce-loss","-j","4","--output","./output"]
+        }
+    ]
+}

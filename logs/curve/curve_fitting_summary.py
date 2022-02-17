@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 
 # filelist = ['20220118ResNetV1.5FP32','20220119ResNetV1.5TF32','20220209ResNetV1.5AMP']
-filelist = ['summary_FP32.csv','summary_TF32.csv','summary_AMP.csv']
-filepath = './interlog/'
+filelist = ['summary_FP32.csv','summary_TF32.csv','summary_AMP.csv','../2020216ResNetV1.5wholeTF32v0.4.log']
+# filepath = './interlog/'
 # filename = filelist[0] 
 
 

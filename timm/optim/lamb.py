@@ -55,7 +55,7 @@ import math
 
 import torch
 from torch.optim import Optimizer
-from timm.utils.castTF32 import cast_fp32_tf32, cast_fp32_tf32_float
+from timm.utils.castTF32 import cast_fp32_tf32, cast_fp32_tf32_float,cast_fp32_tf32_gpu, cast_fp32_tf32_inplaceV2
 
 
 class Lamb(Optimizer):
@@ -89,11 +89,11 @@ class Lamb(Optimizer):
             self, params, lr=1e-3, bias_correction=True, betas=(0.9, 0.999), eps=1e-6,
             weight_decay=0.01, grad_averaging=True, max_grad_norm=1.0, trust_clip=False, always_adapt=False):
         # init-weights cast
-        lr = cast_fp32_tf32_float(lr) #AttributeError: 'float' object has no attribute 'view'  0.008 -> 0.008
-        eps = cast_fp32_tf32_float(eps) #1e-06 -> 9.9931e-07
-        betas = (cast_fp32_tf32_float(betas[0]), cast_fp32_tf32_float(betas[1])) #(0.9, 0.999) -> (0.8999, 0.9985)
-        weight_decay = cast_fp32_tf32_float(weight_decay)
-        max_grad_norm = cast_fp32_tf32_float(max_grad_norm)
+        # lr = cast_fp32_tf32_float(lr) #AttributeError: 'float' object has no attribute 'view'  0.008 -> 0.008
+        # eps = cast_fp32_tf32_float(eps) #1e-06 -> 9.9931e-07
+        # betas = (cast_fp32_tf32_float(betas[0]), cast_fp32_tf32_float(betas[1])) #(0.9, 0.999) -> (0.8999, 0.9985)
+        # weight_decay = cast_fp32_tf32_float(weight_decay)
+        # max_grad_norm = cast_fp32_tf32_float(max_grad_norm)
 
         defaults = dict(
             lr=lr, bias_correction=bias_correction, betas=betas, eps=eps, weight_decay=weight_decay,
@@ -103,8 +103,11 @@ class Lamb(Optimizer):
         # # {'lr': 0.008, 'bias_correction': True, 'betas': (0.9, 0.999), 'eps': 1e-06, 'weight_decay': 0.0, 'grad_averaging': True, 'max_grad_norm': 1.0, 'trust_clip': False, 'always_adapt': False}
         # # {'lr': 0.00800323486328125, 'bias_correction': True, 'betas': (0.89990234375, 0.9990234375), 'eps': 1.000240445137024e-06, 'weight_decay': 0.0, 'grad_averaging': True, 'max_grad_norm': 1.0, 'trust_clip': False, 'always_adapt': False}
         # input('---stop here---')    
+        ''' len(params)=2 /timm/optim/optim_factory.py add_weight_decay() line38
+        [{'params': no_decay, 'weight_decay': 0.},
+        {'params': decay, 'weight_decay': weight_decay}]'''
 
-        super().__init__(params, defaults)
+        super().__init__(params, defaults)  
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -121,14 +124,27 @@ class Lamb(Optimizer):
         device = self.param_groups[0]['params'][0].device
         one_tensor = torch.tensor(1.0, device=device)  # because torch.where doesn't handle scalars correctly
         global_grad_norm = torch.zeros(1, device=device)
-        for group in self.param_groups:
+        count=0
+        # f=open('./logs/optimizer_grad.log','w+')
+        for i,group in enumerate(self.param_groups): #len(self.param_groups)=2
+            # f=open('./logs/Optimizer_param_groups.log','w+')
+            # f.write(str(group))
+            # f.close()
+            # input('stop here')
             for p in group['params']: #p already cast in backward
                 if p.grad is None:
+                    count +=1
                     continue
                 grad = p.grad
+                # print("-----Optimizer Grad-----",grad.shape,grad)
+                # grad_str= str(grad.shape)+str(grad)+'\n'
+                # f.write(grad_str)
                 if grad.is_sparse:
                     raise RuntimeError('Lamb does not support sparse gradients, consider SparseAdam instad.')
                 global_grad_norm.add_(grad.pow(2).sum())
+            # print("OPTIMIZER Params:",i,len(group['params']), count)
+        #     f.write("\n---NEXT---\n")
+        # f.close()
 
         global_grad_norm = torch.sqrt(global_grad_norm)
         # add for cast
@@ -166,7 +182,8 @@ class Lamb(Optimizer):
             # bias_correction1 = cast_fp32_tf32_float(bias_correction1) 
             # bias_correction2 = cast_fp32_tf32_float(bias_correction2)
 
-            for p in group['params']:
+            # f_opt=open('./logs/opt/opt_verify.log','w+')
+            for index,p in enumerate(group['params']):
                 if p.grad is None:
                     continue
                 grad = p.grad.div_(clip_global_grad_norm)
@@ -222,6 +239,16 @@ class Lamb(Optimizer):
 
                 p.add_(update, alpha=-group['lr'])
                 # add for cast
-                p = cast_fp32_tf32(p) 
+                # print(p.device) # cuda:0
+                # if(index==0):
+                #     opt_str = 'in lamb before cast:' + str(p) +'\n'
+                #     f_opt.write(opt_str)
+                cast_fp32_tf32_inplaceV2(p) ###wrong
+                # if(index==0):
+                #     opt_str = 'in lamb before cast:' + str(p) +'\n'
+                #     f_opt.write(opt_str)
+                # print(p.device) # cuda:0
+                # input('stop here')
+            # f_opt.close()
 
         return loss

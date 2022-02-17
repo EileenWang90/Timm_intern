@@ -1,0 +1,40 @@
+OOK before cast: <class 'torch.Tensor'> tensor(0.7051, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+HOOK after cast: <class 'torch.Tensor'> tensor(0.7051, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+stop here
+CAST: input is None. index= 0
+OPTIMIZER Params: 0 107 0
+OPTIMIZER Params: 1 54 0
+Train: 0 [   0/5004 (  0%)]  Loss: 0.7051 (0.705)  Time: 11.021s,   23.23/s  (11.021s,   23.23/s)  LR: 1.000e-04  Data: 1.604 (1.604)
+HOOK before cast: <class 'torch.Tensor'> tensor(0.7041, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+HOOK after cast: <class 'torch.Tensor'> tensor(0.7041, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+stop here
+CAST: input is None. index= 0
+OPTIMIZER Params: 0 107 0
+OPTIMIZER Params: 1 54 0
+HOOK before cast: <class 'torch.Tensor'> tensor(0.7046, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+HOOK after cast: <class 'torch.Tensor'> tensor(0.7046, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+stop here
+CAST: input is None. index= 0
+OPTIMIZER Params: 0 107 0
+OPTIMIZER Params: 1 54 0
+HOOK before cast: <class 'torch.Tensor'> tensor(0.7034, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+HOOK after cast: <class 'torch.Tensor'> tensor(0.7031, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+stop here
+CAST: input is None. index= 0
+OPTIMIZER Params: 0 107 0
+OPTIMIZER Params: 1 54 0
+HOOK before cast: <class 'torch.Tensor'> tensor(0.7022, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+HOOK after cast: <class 'torch.Tensor'> tensor(0.7021, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+stop here
+CAST: input is None. index= 0
+OPTIMIZER Params: 0 107 0
+OPTIMIZER Params: 1 54 0
+HOOK before cast: <class 'torch.Tensor'> tensor(0.7017, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+HOOK after cast: <class 'torch.Tensor'> tensor(0.7017, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+stop here
+CAST: input is None. index= 0
+OPTIMIZER Params: 0 107 0
+OPTIMIZER Params: 1 54 0
+HOOK before cast: <class 'torch.Tensor'> tensor(0.7005, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+HOOK after cast: <class 'torch.Tensor'> tensor(0.7002, device='cuda:0', grad_fn=<BinaryCrossEntropyWithLogitsBackward>)
+

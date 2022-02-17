@@ -689,10 +689,12 @@ class ResNet(nn.Module):
                 # print('Conv before cast:', type(m.weight.data),len(m.weight.data), m.weight.data.shape, m.weight.data[0][0].shape)  #before cast: <class 'torch.Tensor'> 64 torch.Size([64, 3, 7, 7]) torch.Size([7])
                 # # type(m.weight):<class 'torch.nn.parameter.Parameter'>, type(m.weight.data):type(m.weight.data)
                 # print('Conv before cast:', m.weight.data[0][0])
-                m.weight.data = cast_fp32_tf32(m.weight.data)
+                m.weight.data = cast_fp32_tf32(m.weight.data) #cpu
                 # print('Conv after cast:', type(m.weight.data),len(m.weight.data), m.weight.data.shape, m.weight.data[0][0].shape) 
                 # print('Conv after cast:', m.weight.data[0][0])
-                # todo bias
+                # TODO bias 
+                if m.bias is not None:
+                    m.bias.data = cast_fp32_tf32(m.bias.data)
 
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.ones_(m.weight)  #int'1065353216' hex'0x3f800000'

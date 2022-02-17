@@ -21,6 +21,7 @@ from .radam import RAdam
 from .rmsprop_tf import RMSpropTF
 from .sgdp import SGDP
 
+
 try:
     from apex.optimizers import FusedNovoGrad, FusedAdam, FusedLAMB, FusedSGD
     has_apex = True
@@ -31,8 +32,9 @@ except ImportError:
 def add_weight_decay(model, weight_decay=1e-5, skip_list=()):
     decay = []
     no_decay = []
-    for name, param in model.named_parameters():
-        if not param.requires_grad:
+    for i, (name, param) in enumerate(model.named_parameters()):
+        # print(i, name, param.grad) #param.grad is none
+        if not param.requires_grad:   # no need for double check. initialize
             continue  # frozen weights
         if len(param.shape) == 1 or name.endswith(".bias") or name in skip_list:
             no_decay.append(param)

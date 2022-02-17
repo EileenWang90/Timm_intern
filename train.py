@@ -61,6 +61,8 @@ except ImportError:
 torch.backends.cudnn.benchmark = True
 _logger = logging.getLogger('train')
 
+torch.autograd.set_detect_anomaly(True) #Hint: enable anomaly detection to find the operation that failed to compute its gradient
+
 # The first arg parser parses out only the --config argument, this argument is used to
 # load a yaml file containing key-values that override the defaults for the main parser below
 config_parser = parser = argparse.ArgumentParser(description='Training Config', add_help=False)
@@ -321,8 +323,8 @@ def _parse_args():
 def main():
     args, args_text = _parse_args()
     logpath = './output/' + str(datetime.now().strftime("%Y%m%d-%H%M%S")) + args.experiment + '.log'
-    # setup_default_logging(log_path=logpath)
-    setup_default_logging()
+    setup_default_logging(log_path=logpath)
+    # setup_default_logging()
     
     if args.log_wandb:
         if has_wandb:
@@ -390,9 +392,9 @@ def main():
     # input("here to stop:")
     
     ##############################################################################################
+    handle=[]
     ### Forward Pre Hook
     from timm.models.layers import SelectAdaptivePool2d
-    handle=[]
     # f_fwd = open("./logs/fwd_layers.log", "w+")
     layer_type=(nn.Conv2d, nn.BatchNorm2d, nn.ReLU, nn.MaxPool2d, nn.AdaptiveAvgPool2d, nn.Linear) #SelectAdaptivePool2d
     for index, (name, child) in enumerate(model.named_modules()):
@@ -421,7 +423,7 @@ def main():
     #     else:
     #         f_bwd.write("ooo{0} {1} {2} {3}\n".format(index, name, type(child), child))
     # f_bwd.close()
-    ##############################################################################################
+    # ##############################################################################################
     ### Barkward Hook for weight gradients
     # f_bwdw = open("./logs/bwd_parameters.log", "w+")
     for index, (name, para) in enumerate(model.named_parameters()):
@@ -477,6 +479,7 @@ def main():
         model = torch.jit.script(model)
 
     optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=args))
+    # print(optimizer)
 
     # setup automatic mixed-precision (AMP) loss scaling and op casting
     amp_autocast = suppress  # do nothing
@@ -666,13 +669,13 @@ def main():
                 safe_model_name(args.model),
                 str(data_config['input_size'][-1])
             ])
-        # output_dir = get_outdir(args.output if args.output else './output/train', exp_name)   #Donot save files
+        output_dir = get_outdir(args.output if args.output else './output/train', exp_name)   #Donot save files
         decreasing = True if eval_metric == 'loss' else False
-        # saver = CheckpointSaver(
-        #     model=model, optimizer=optimizer, args=args, model_ema=model_ema, amp_scaler=loss_scaler,
-        #     checkpoint_dir=output_dir, recovery_dir=output_dir, decreasing=decreasing, max_history=args.checkpoint_hist)
-        # with open(os.path.join(output_dir, 'args.yaml'), 'w') as f:
-        #     f.write(args_text)
+        saver = CheckpointSaver(
+            model=model, optimizer=optimizer, args=args, model_ema=model_ema, amp_scaler=loss_scaler,
+            checkpoint_dir=output_dir, recovery_dir=output_dir, decreasing=decreasing, max_history=args.checkpoint_hist)
+        with open(os.path.join(output_dir, 'args.yaml'), 'w') as f:
+            f.write(args_text)
 
     try:
         for epoch in range(start_epoch, num_epochs):
@@ -682,7 +685,7 @@ def main():
             train_metrics = train_one_epoch(
                 epoch, model, loader_train, optimizer, train_loss_fn, args,
                 lr_scheduler=lr_scheduler, saver=saver, output_dir=output_dir,
-                amp_autocast=amp_autocast, loss_scaler=loss_scaler, model_ema=model_ema, mixup_fn=mixup_fn,handle=handle)
+                amp_autocast=amp_autocast, loss_scaler=loss_scaler, model_ema=model_ema, mixup_fn=mixup_fn)
 
             if args.distributed and args.dist_bn in ('broadcast', 'reduce'):
                 if args.local_rank == 0:
@@ -724,7 +727,7 @@ def main():
 def train_one_epoch(
         epoch, model, loader, optimizer, loss_fn, args,
         lr_scheduler=None, saver=None, output_dir=None, amp_autocast=suppress,
-        loss_scaler=None, model_ema=None, mixup_fn=None, handle=None):
+        loss_scaler=None, model_ema=None, mixup_fn=None):
 
     if args.mixup_off_epoch and epoch >= args.mixup_off_epoch:
         if args.prefetcher and loader.mixup_enabled:
@@ -789,7 +792,9 @@ def train_one_epoch(
                 dispatch_clip_grad(
                     model_parameters(model, exclude_head='agc' in args.clip_mode),
                     value=args.clip_grad, mode=args.clip_mode)
+            # print('Before opt step:', optimizer.param_groups[1]['params'][0])
             optimizer.step()
+            # print('After opt step:', optimizer.param_groups[1]['params'][0])
             ### FP32-to-TF32 ?
             optimizer_time_m.update(time.time() - bptime)
 
